@@ -1,0 +1,35 @@
+# Triggers RunPod GitHub integration rebuild (RunPod listens for GitHub Releases).
+name: RunPod Worker Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - requirements.txt
+      - handler.py
+      - wan_engine.py
+      - bootstrap.py
+      - patch_diffusers.py
+      - watermark_ffmpeg.py
+      - .github/workflows/runpod-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub Release for RunPod
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: runpod-${{ github.run_number }}-${{ github.sha }}
+          name: RunPod worker build ${{ github.run_number }}
+          body: |
+            Auto-release for RunPod Serverless GitHub integration.
+            Commit: ${{ github.sha }}
+          generate_release_notes: true
