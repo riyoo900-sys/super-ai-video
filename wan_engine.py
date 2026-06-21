@@ -1,6 +1,8 @@
 """Wan2.1-T2V-1.3B — singleton pipeline kept on GPU between jobs (fast path)."""
 from __future__ import annotations
 
+import bootstrap  # noqa: F401 — patch diffusers before import
+
 import shutil
 import subprocess
 from pathlib import Path
