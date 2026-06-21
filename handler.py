@@ -2,15 +2,16 @@
 """RunPod Serverless handler — Wan 2.1 T2V 1.3B (4s clip)."""
 from __future__ import annotations
 
+import bootstrap  # noqa: F401 — patch diffusers before any model import
+
 import base64
 import tempfile
 import traceback
 from pathlib import Path
 
-# Load torch custom_op patch before runpod/diffusers.
-from wan_engine import WAN_MODEL_ID, generate_video, warmup
-
 import runpod
+
+from wan_engine import WAN_MODEL_ID, generate_video, warmup
 from watermark_ffmpeg import burn_animated_watermark
 
 
@@ -49,7 +50,8 @@ def handler(job: dict) -> dict:
 
 
 if __name__ == "__main__":
-    print("[runpod] worker v3 (pytorch 2.5.1 + diffusers patch)")
-    print("[runpod] warming up (optional)...")
+    import diffusers
+
+    print(f"[runpod] worker v4 diffusers={diffusers.__version__}")
     warmup()
     runpod.serverless.start({"handler": handler})

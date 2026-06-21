@@ -1,40 +1,6 @@
 """Wan2.1-T2V-1.3B — singleton pipeline kept on GPU between jobs (fast path)."""
 from __future__ import annotations
 
-import os
-
-# Native attention only — flash-attn custom_op breaks on PyTorch 2.4/2.5.
-os.environ.setdefault("DIFFUSERS_ATTN_BACKEND", "native")
-
-
-def _patch_torch_custom_ops() -> None:
-    """Skip diffusers flash-attn @custom_op registration (infer_schema crash)."""
-    try:
-        import torch
-    except ImportError:
-        return
-    if getattr(_patch_torch_custom_ops, "_done", False):
-        return
-
-    def custom_op_no_op(name, fn=None, /, *, mutates_args, device_types=None, schema=None):
-        def wrap(func):
-            return func
-
-        return wrap if fn is None else fn
-
-    def register_fake_no_op(op, fn=None, /, *, lib=None, _stacklevel=1):
-        def wrap(func):
-            return func
-
-        return wrap if fn is None else fn
-
-    torch.library.custom_op = custom_op_no_op  # type: ignore[attr-defined]
-    torch.library.register_fake = register_fake_no_op  # type: ignore[attr-defined]
-    _patch_torch_custom_ops._done = True  # type: ignore[attr-defined]
-
-
-_patch_torch_custom_ops()
-
 import shutil
 import subprocess
 from pathlib import Path

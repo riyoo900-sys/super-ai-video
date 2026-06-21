@@ -1,7 +1,7 @@
 runpod>=1.7.0
-diffusers==0.32.2
-transformers>=4.44.0,<5
-accelerate>=0.33.0
+diffusers==0.33.1
+transformers==4.51.3
+accelerate==1.6.0
 safetensors>=0.4.0
 sentencepiece>=0.2.0
 huggingface_hub>=0.24.0
