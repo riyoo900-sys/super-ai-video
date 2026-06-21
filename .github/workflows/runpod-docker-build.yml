@@ -23,10 +23,10 @@ jobs:
       - name: Build worker image
         run: docker build -t super-ai-video-wan:test .
 
-      - name: Verify wan import inside image
+      - name: Verify patch inside image
         run: |
           docker run --rm super-ai-video-wan:test \
-            python -c "import bootstrap; from diffusers import AutoencoderKLWan, WanPipeline; print('OK')"
+            python -c "import bootstrap; from diffusers import AutoencoderKLWan, WanPipeline; print('OK wan')"
 
   release:
     needs: docker-build

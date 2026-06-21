@@ -14,7 +14,7 @@ WORKDIR /app
 COPY requirements.txt bootstrap.py patch_diffusers.py ./
 RUN pip install --no-cache-dir -r requirements.txt \
     && python patch_diffusers.py \
-    && python -c "import bootstrap; from diffusers import AutoencoderKLWan, WanPipeline; print('wan import ok v7')"
+    && python -c "import pathlib,sys; p=pathlib.Path(sys.prefix)/'lib/python3.11/site-packages/diffusers/models/attention_dispatch.py'; t=p.read_text(); assert 'RUNPOD_PATCHED_v7' in t; compile(t,str(p),'exec'); print('patch ok v7')"
 
 COPY wan_engine.py watermark_ffmpeg.py handler.py ./
 
