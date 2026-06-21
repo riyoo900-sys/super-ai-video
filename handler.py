@@ -49,6 +49,7 @@ def handler(job: dict) -> dict:
 
 
 if __name__ == "__main__":
+    print("[runpod] worker v3 (pytorch 2.5.1 + diffusers patch)")
     print("[runpod] warming up (optional)...")
     warmup()
     runpod.serverless.start({"handler": handler})

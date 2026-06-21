@@ -11,8 +11,9 @@ RUN apt-get update -qq && apt-get install -y -qq ffmpeg fonts-dejavu-core \
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt patch_diffusers.py ./
+RUN pip install --no-cache-dir -r requirements.txt \
+    && python patch_diffusers.py
 
 COPY wan_engine.py watermark_ffmpeg.py handler.py ./
 
