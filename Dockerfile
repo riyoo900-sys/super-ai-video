@@ -14,7 +14,7 @@ WORKDIR /app
 COPY requirements.txt bootstrap.py patch_diffusers.py ./
 RUN pip install --no-cache-dir -r requirements.txt \
     && python patch_diffusers.py \
-    && python -c "import bootstrap; from diffusers import AutoencoderKLWan, WanPipeline; print('wan import ok v5')"
+    && python -c "import bootstrap; from diffusers import AutoencoderKLWan, WanPipeline; print('wan import ok v6')"
 
 COPY wan_engine.py watermark_ffmpeg.py handler.py ./
 

@@ -1,0 +1,20 @@
+@echo off
+setlocal
+echo.
+echo ============================================
+echo   RUNPOD - Image jdid (v6) - 3 d9a9 f9at
+echo ============================================
+echo.
+echo 1) Dkhel: https://console.runpod.io/serverless
+echo 2) Endpoint: super-ai-video
+echo 3) Edit / Settings
+echo 4) Badel "GitHub" b:
+echo.
+echo    ghcr.io/riyoo900-sys/super-ai-video-wan:latest
+echo.
+echo 5) Save / Deploy
+echo 6) Jereb Generate f telefon
+echo.
+echo MA3NDKCH RunPod? Sift screenshot dyal Builds tab.
+echo.
+pause

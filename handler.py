@@ -52,6 +52,6 @@ def handler(job: dict) -> dict:
 if __name__ == "__main__":
     import diffusers
 
-    print(f"[runpod] worker v5 diffusers={diffusers.__version__} build=auto")
+    print(f"[runpod] worker v6 diffusers={diffusers.__version__}")
     warmup()
     runpod.serverless.start({"handler": handler})
