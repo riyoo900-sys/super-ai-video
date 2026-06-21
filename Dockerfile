@@ -1,5 +1,5 @@
 # RunPod GitHub deploy — keep in sync with runpod-worker/Dockerfile
-FROM runpod/pytorch:2.6.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+FROM runpod/pytorch:2.5.1-py3.11-cuda12.4.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV HF_HOME=/runpod-volume/huggingface
@@ -14,7 +14,7 @@ WORKDIR /app
 COPY requirements.txt bootstrap.py patch_diffusers.py ./
 RUN pip install --no-cache-dir -r requirements.txt \
     && python patch_diffusers.py \
-    && python -c "import bootstrap; from diffusers import AutoencoderKLWan, WanPipeline; print('wan import ok v6')"
+    && python -c "import bootstrap; from diffusers import AutoencoderKLWan, WanPipeline; print('wan import ok v7')"
 
 COPY wan_engine.py watermark_ffmpeg.py handler.py ./
 

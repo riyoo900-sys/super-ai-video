@@ -1,4 +1,4 @@
-# Build + verify RunPod worker on GitHub (same Dockerfile RunPod uses).
+# Build worker on GitHub first; only then create Release (RunPod rebuild).
 name: RunPod Docker Build Verify
 
 on:
@@ -17,30 +17,16 @@ on:
 jobs:
   docker-build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Build worker image
-        run: docker build -t ghcr.io/riyoo900-sys/super-ai-video-wan:latest .
+        run: docker build -t super-ai-video-wan:test .
 
-      - name: Verify diffusers import inside image
+      - name: Verify wan import inside image
         run: |
-          docker run --rm ghcr.io/riyoo900-sys/super-ai-video-wan:latest \
-            python -c "import bootstrap; from diffusers import AutoencoderKLWan, WanPipeline; print('OK wan import')"
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Push to GitHub Container Registry
-        run: |
-          docker push ghcr.io/riyoo900-sys/super-ai-video-wan:latest
+          docker run --rm super-ai-video-wan:test \
+            python -c "import bootstrap; from diffusers import AutoencoderKLWan, WanPipeline; print('OK')"
 
   release:
     needs: docker-build
@@ -56,6 +42,6 @@ jobs:
           tag_name: runpod-${{ github.run_number }}-${{ github.sha }}
           name: RunPod worker build ${{ github.run_number }}
           body: |
-            Docker image: ghcr.io/riyoo900-sys/super-ai-video-wan:latest
+            Verified docker build passed.
             Commit: ${{ github.sha }}
           generate_release_notes: true

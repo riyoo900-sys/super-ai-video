@@ -5,6 +5,20 @@ import os
 import sys
 
 
+def _noop_custom_op(name, fn=None, /, *, mutates_args, device_types=None, schema=None):
+    def wrap(func):
+        return func
+
+    return wrap if fn is None else fn
+
+
+def _noop_register_fake(op, fn=None, /, *, lib=None, _stacklevel=1):
+    def wrap(func):
+        return func
+
+    return wrap if fn is None else fn
+
+
 def apply() -> None:
     os.environ.setdefault("DIFFUSERS_ATTN_BACKEND", "native")
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
@@ -12,20 +26,14 @@ def apply() -> None:
     try:
         import torch
 
-        def custom_op_no_op(name, fn=None, /, *, mutates_args, device_types=None, schema=None):
-            def wrap(func):
-                return func
+        torch.library.custom_op = _noop_custom_op  # type: ignore[attr-defined]
+        torch.library.register_fake = _noop_register_fake  # type: ignore[attr-defined]
+        try:
+            import torch._library.custom_ops as custom_ops
 
-            return wrap if fn is None else fn
-
-        def register_fake_no_op(op, fn=None, /, *, lib=None, _stacklevel=1):
-            def wrap(func):
-                return func
-
-            return wrap if fn is None else fn
-
-        torch.library.custom_op = custom_op_no_op  # type: ignore[attr-defined]
-        torch.library.register_fake = register_fake_no_op  # type: ignore[attr-defined]
+            custom_ops.custom_op = _noop_custom_op  # type: ignore[attr-defined]
+        except ImportError:
+            pass
     except ImportError:
         pass
 
