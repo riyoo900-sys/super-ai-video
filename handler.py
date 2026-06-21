@@ -7,9 +7,10 @@ import tempfile
 import traceback
 from pathlib import Path
 
-import runpod
-
+# Load torch custom_op patch before runpod/diffusers.
 from wan_engine import WAN_MODEL_ID, generate_video, warmup
+
+import runpod
 from watermark_ffmpeg import burn_animated_watermark
 
 
