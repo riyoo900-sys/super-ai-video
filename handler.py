@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RunPod Serverless handler — Wan 2.1 T2V 1.3B (4s clip)."""
+"""RunPod Serverless handler — Wan 2.1 T2V 14B (pro quality)."""
 from __future__ import annotations
 
 import base64
@@ -17,7 +17,7 @@ def handler(job: dict) -> dict:
         print(f"[handler] keys={list(inp.keys())}", flush=True)
 
         if inp.get("ping"):
-            return {"ok": True, "worker": "v8k"}
+            return {"ok": True, "worker": "v9-pro"}
 
         prompt = str(inp.get("prompt", "")).strip()
         if not prompt:
@@ -68,7 +68,7 @@ def handler(job: dict) -> dict:
 def main() -> None:
     import bootstrap  # noqa: F401
 
-    print("[runpod] worker v8k starting...", flush=True)
+    print("[runpod] worker v9-pro (Wan 14B) starting...", flush=True)
     from wan_engine import warmup
 
     warmup()
