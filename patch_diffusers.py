@@ -5,7 +5,7 @@ import pathlib
 import re
 import sys
 
-MARKER = "# RUNPOD_PATCHED_v7"
+MARKER = "# RUNPOD_PATCHED_v8"
 
 
 def main() -> None:
@@ -17,7 +17,7 @@ def main() -> None:
 
     text = path.read_text(encoding="utf-8")
     if MARKER in text:
-        print("[patch_diffusers] already patched v7")
+        print("[patch_diffusers] already patched v8")
         return
 
     # Disable torch custom_op binding in this module.
@@ -47,7 +47,7 @@ def main() -> None:
 
     # Fail build early if patch broke syntax.
     compile(path.read_text(encoding="utf-8"), str(path), "exec")
-    print(f"[patch_diffusers] patched v7 → {path}")
+    print(f"[patch_diffusers] patched v8 → {path}")
 
 
 if __name__ == "__main__":

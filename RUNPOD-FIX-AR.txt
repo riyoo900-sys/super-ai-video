@@ -1,20 +1,22 @@
 @echo off
-setlocal
 echo.
 echo ============================================
-echo   RUNPOD - Image jdid (v6) - 3 d9a9 f9at
+echo   RUNPOD - Deploy worker v8 (MOHIM)
 echo ============================================
 echo.
-echo 1) Dkhel: https://console.runpod.io/serverless
-echo 2) Endpoint: super-ai-video
-echo 3) Edit / Settings
-echo 4) Badel "GitHub" b:
+echo 1) https://console.runpod.io/serverless
+echo 2) Endpoint super-ai-video
+echo 3) Tab BUILDS
+echo 4) New Build  ^(branch main^)
+echo 5) Estanna Successful ^(10-20 min^)
 echo.
-echo    ghcr.io/riyoo900-sys/super-ai-video-wan:latest
+echo 6) Tab RELEASES
+echo 7) Deploy / activate build jdid
+echo    ^(Release #2 = 0cd087e = QDIM = MOCHKIL^)
 echo.
-echo 5) Save / Deploy
-echo 6) Jereb Generate f telefon
+echo 8) Settings: Execution timeout = 600 sec ^(10 min^)
+echo 9) Jereb Requests -^> Run
 echo.
-echo MA3NDKCH RunPod? Sift screenshot dyal Builds tab.
+echo Logs khasshom: [runpod] worker v8
 echo.
 pause

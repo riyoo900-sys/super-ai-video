@@ -49,9 +49,13 @@ def handler(job: dict) -> dict:
         return {"error": str(e)[:500]}
 
 
-if __name__ == "__main__":
+def main() -> None:
     import diffusers
 
-    print(f"[runpod] worker v7 diffusers={diffusers.__version__}")
+    print(f"[runpod] worker v8 diffusers={diffusers.__version__}")
     warmup()
     runpod.serverless.start({"handler": handler})
+
+
+if __name__ == "__main__":
+    main()
