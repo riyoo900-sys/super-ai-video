@@ -12,12 +12,17 @@ _pipe = None
 _model_id: str | None = None
 
 WAN_MODEL_ID = "Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
-FAST_FRAMES = 13
-FAST_STEPS = 12
-FAST_WIDTH = 416
-FAST_HEIGHT = 240
-FAST_FPS = 6
+# Balanced quality (RTX 4090 / 24GB). Was 416x240×12 steps — caused flickery output.
+FAST_FRAMES = 21
+FAST_STEPS = 25
+FAST_WIDTH = 832
+FAST_HEIGHT = 480
+FAST_FPS = 8
 FAST_MAX_DURATION_SEC = 4
+NEGATIVE_PROMPT = (
+    "blurry, low quality, distorted, flickering, static, noisy, "
+    "overexposed, ugly, bad anatomy, watermark, text"
+)
 
 
 def _log(msg: str) -> None:
@@ -169,11 +174,12 @@ def generate_video(
     _log(f"[wan_engine] inference {FAST_FRAMES} frames {FAST_WIDTH}x{FAST_HEIGHT}...")
     result = pipe(
         prompt=prompt,
+        negative_prompt=NEGATIVE_PROMPT,
         num_frames=FAST_FRAMES,
         width=FAST_WIDTH,
         height=FAST_HEIGHT,
         num_inference_steps=FAST_STEPS,
-        guidance_scale=4.0,
+        guidance_scale=5.0,
     )
 
     _log("[wan_engine] export mp4...")
