@@ -18,6 +18,7 @@ from watermark_ffmpeg import burn_animated_watermark
 def handler(job: dict) -> dict:
     inp = job.get("input") or {}
     prompt = str(inp.get("prompt", "")).strip()
+    print(f"[handler] job received prompt={prompt[:60]!r}", flush=True)
     if not prompt:
         return {"error": "prompt required"}
 
@@ -50,9 +51,7 @@ def handler(job: dict) -> dict:
 
 
 def main() -> None:
-    import diffusers
-
-    print(f"[runpod] worker v8b diffusers={diffusers.__version__}")
+    print("[runpod] worker v8c starting...", flush=True)
     warmup()
     runpod.serverless.start({"handler": handler})
 

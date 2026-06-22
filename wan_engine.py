@@ -1,18 +1,18 @@
-"""Wan2.1-T2V-1.3B — singleton pipeline kept on GPU between jobs (fast path)."""
+"""Wan2.1-T2V-1.3B — singleton pipeline kept on GPU between jobs."""
 from __future__ import annotations
 
 import bootstrap  # noqa: F401 — patch diffusers before import
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 _pipe = None
 _model_id: str | None = None
-_device: str | None = None
 
 WAN_MODEL_ID = "Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
-FAST_FRAMES = 17  # 4*k+1 minimum
+FAST_FRAMES = 17
 FAST_STEPS = 18
 FAST_WIDTH = 416
 FAST_HEIGHT = 240
@@ -20,31 +20,8 @@ FAST_FPS = 6
 FAST_MAX_DURATION_SEC = 4
 
 
-def _ffmpeg_placeholder(prompt: str, duration_sec: int, out: Path) -> None:
-    ffmpeg = shutil.which("ffmpeg")
-    if not ffmpeg:
-        raise RuntimeError("ffmpeg not found")
-    safe = prompt.replace(":", r"\:").replace("'", r"\'")[:120]
-    d = min(duration_sec, FAST_MAX_DURATION_SEC)
-    subprocess.run(
-        [
-            ffmpeg,
-            "-y",
-            "-f",
-            "lavfi",
-            "-i",
-            f"color=c=0x1a1a2e:s={FAST_WIDTH}x{FAST_HEIGHT}:d={d}",
-            "-vf",
-            f"drawtext=text='{safe}':fontcolor=white:fontsize=20:x=(w-text_w)/2:y=(h-text_h)/2",
-            "-c:v",
-            "libx264",
-            "-pix_fmt",
-            "yuv420p",
-            str(out),
-        ],
-        check=True,
-        timeout=60,
-    )
+def _log(msg: str) -> None:
+    print(msg, flush=True)
 
 
 def _cuda_ready() -> bool:
@@ -56,22 +33,39 @@ def _cuda_ready() -> bool:
         return False
 
 
+def _gpu_mem_gb() -> float:
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            return 0.0
+        return torch.cuda.get_device_properties(0).total_memory / (1024**3)
+    except Exception:
+        return 0.0
+
+
 def _load_pipeline(model_id: str):
-    global _pipe, _model_id, _device
+    global _pipe, _model_id
     if _pipe is not None and _model_id == model_id:
         return _pipe
 
     import torch
+
+    _log("[wan_engine] step 1/4 import diffusers...")
     from diffusers import AutoencoderKLWan, WanPipeline
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
     dtype = torch.bfloat16
-    print(f"[wan_engine] loading {model_id} with CPU offload (T4 16GB safe)...")
+    mem_gb = _gpu_mem_gb()
+    _log(f"[wan_engine] step 2/4 load VAE ({model_id}) gpu={mem_gb:.1f}GB")
+
     vae = AutoencoderKLWan.from_pretrained(
         model_id, subfolder="vae", torch_dtype=torch.float32, low_cpu_mem_usage=True
     )
+
+    _log("[wan_engine] step 3/4 load WanPipeline...")
     pipe = WanPipeline.from_pretrained(
         model_id, vae=vae, torch_dtype=dtype, low_cpu_mem_usage=True
     )
@@ -80,7 +74,14 @@ def _load_pipeline(model_id: str):
         pipe.enable_attention_slicing("max")
     except Exception:
         pass
-    pipe.enable_model_cpu_offload()
+
+    if mem_gb >= 20:
+        _log("[wan_engine] step 4/4 move pipeline to CUDA (48GB path)")
+        pipe.to("cuda")
+    else:
+        _log("[wan_engine] step 4/4 enable_model_cpu_offload (16GB path)")
+        pipe.enable_model_cpu_offload()
+
     try:
         pipe.set_progress_bar_config(disable=True)
     except Exception:
@@ -88,17 +89,15 @@ def _load_pipeline(model_id: str):
 
     _pipe = pipe
     _model_id = model_id
-    _device = "cpu_offload"
-    print("[wan_engine] model ready (CPU offload — fits T4)")
+    _log("[wan_engine] model ready")
     return _pipe
 
 
 def warmup(model_id: str | None = None) -> None:
-    """Deferred — loading on first job avoids filling T4 VRAM at worker start."""
     if not _cuda_ready():
-        print("[wan_engine] warmup skipped — no CUDA")
+        _log("[wan_engine] warmup skipped — no CUDA")
         return
-    print("[wan_engine] warmup deferred until first job (VRAM safe)")
+    _log("[wan_engine] warmup deferred until first job")
 
 
 def generate_video(
@@ -108,21 +107,20 @@ def generate_video(
     model_id: str = WAN_MODEL_ID,
 ) -> None:
     if not _cuda_ready():
-        raise RuntimeError(
-            "CUDA/GPU not available on worker — cannot run Wan video model. "
-            "Run videoWorkerSpeedPatch to install PyTorch CUDA on the GPU VM."
-        )
+        raise RuntimeError("CUDA/GPU not available on worker")
 
     from diffusers.utils import export_to_video
 
     import torch
 
+    _log(f"[wan_engine] generate start prompt={prompt[:60]!r}")
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
     pipe = _load_pipeline(model_id)
-    # Short clip + few steps = sub-minute on warm T4.
     capped = min(max(1, duration_sec), FAST_MAX_DURATION_SEC)
+
+    _log(f"[wan_engine] inference {FAST_FRAMES} frames {FAST_WIDTH}x{FAST_HEIGHT}...")
     result = pipe(
         prompt=prompt,
         num_frames=FAST_FRAMES,
@@ -131,5 +129,7 @@ def generate_video(
         num_inference_steps=FAST_STEPS,
         guidance_scale=4.0,
     )
+
+    _log("[wan_engine] export mp4...")
     export_to_video(result.frames[0], str(output_path), fps=FAST_FPS)
-    print(f"[wan_engine] done → {output_path} (~{capped}s @ {FAST_FPS}fps, {FAST_FRAMES} frames)")
+    _log(f"[wan_engine] done → {output_path} (~{capped}s @ {FAST_FPS}fps)")
