@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RunPod Serverless handler — Wan 2.1 T2V 14B (pro quality)."""
+"""RunPod Serverless handler — Wan 2.1 T2V 14B pro + hybrid Pod sibling."""
 from __future__ import annotations
 
 import base64
@@ -17,7 +17,7 @@ def handler(job: dict) -> dict:
         print(f"[handler] keys={list(inp.keys())}", flush=True)
 
         if inp.get("ping"):
-            return {"ok": True, "worker": "v9-pro"}
+            return {"ok": True, "worker": "v10-pro", "model": "Wan2.1-T2V-14B"}
 
         prompt = str(inp.get("prompt", "")).strip()
         if not prompt:
@@ -39,9 +39,14 @@ def handler(job: dict) -> dict:
                 generate_smoke_video(prompt, raw_mp4)
                 model_name = "smoke"
             else:
-                from wan_engine import WAN_MODEL_ID, generate_video
+                from wan_engine import WAN_MODEL_ID, enhance_prompt, generate_video
 
-                generate_video(prompt, duration_sec, raw_mp4, model_id=WAN_MODEL_ID)
+                generate_video(
+                    enhance_prompt(prompt),
+                    duration_sec,
+                    raw_mp4,
+                    model_id=WAN_MODEL_ID,
+                )
                 model_name = WAN_MODEL_ID
 
             out_path = final_mp4 if watermark else raw_mp4
@@ -68,7 +73,7 @@ def handler(job: dict) -> dict:
 def main() -> None:
     import bootstrap  # noqa: F401
 
-    print("[runpod] worker v9-pro (Wan 14B) starting...", flush=True)
+    print("[runpod] worker v10-pro (Wan 14B cinematic) starting...", flush=True)
     from wan_engine import warmup
 
     warmup()

@@ -32,6 +32,25 @@ NEGATIVE_PROMPT = (
     "oversaturated, deformed"
 )
 
+QUALITY_SUFFIX = (
+    "cinematic lighting, smooth natural motion, sharp focus, "
+    "high detail, professional color grading"
+)
+
+
+def enhance_prompt(prompt: str) -> str:
+    """Light prompt boost for Wan T2V — skip if user already wrote quality tags."""
+    p = prompt.strip()
+    if not p:
+        return p
+    lower = p.lower()
+    if any(
+        k in lower
+        for k in ("cinematic", "4k", "high quality", "smooth motion", "professional")
+    ):
+        return p
+    return f"{p}, {QUALITY_SUFFIX}"
+
 
 def _log(msg: str) -> None:
     print(msg, flush=True)
@@ -203,13 +222,14 @@ def generate_video(
 
     pipe = _load_pipeline(model_id)
     capped = min(max(1, duration_sec), PRO_MAX_DURATION_SEC)
+    enhanced = enhance_prompt(prompt)
 
     _log(
         f"[wan_engine] inference {PRO_FRAMES}f {PRO_WIDTH}x{PRO_HEIGHT} "
         f"{PRO_STEPS}steps (~{capped}s)..."
     )
     result = pipe(
-        prompt=prompt,
+        prompt=enhanced,
         negative_prompt=NEGATIVE_PROMPT,
         num_frames=PRO_FRAMES,
         width=PRO_WIDTH,

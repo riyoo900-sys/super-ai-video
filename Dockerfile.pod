@@ -1,0 +1,22 @@
+# RunPod Pod (hybrid baseline) — same Wan 14B stack + Firestore poller
+FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV HF_HOME=/tmp/huggingface
+ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+ENV DIFFUSERS_ATTN_BACKEND=native
+ENV TOKENIZERS_PARALLELISM=false
+ENV WORKER_MODE=pod
+
+RUN apt-get update -qq && apt-get install -y -qq ffmpeg fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements-pod.txt bootstrap.py patch_diffusers.py ./
+RUN pip install --no-cache-dir -r requirements-pod.txt \
+    && python patch_diffusers.py
+
+COPY wan_engine.py watermark_ffmpeg.py pod_worker.py ./
+
+CMD ["python", "-u", "pod_worker.py"]
