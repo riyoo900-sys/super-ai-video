@@ -17,7 +17,7 @@ def handler(job: dict) -> dict:
         print(f"[handler] keys={list(inp.keys())}", flush=True)
 
         if inp.get("ping"):
-            return {"ok": True, "worker": "v8g"}
+            return {"ok": True, "worker": "v8h"}
 
         prompt = str(inp.get("prompt", "")).strip()
         if not prompt:
@@ -68,7 +68,7 @@ def handler(job: dict) -> dict:
 def main() -> None:
     import bootstrap  # noqa: F401
 
-    print("[runpod] worker v8g starting...", flush=True)
+    print("[runpod] worker v8h starting...", flush=True)
     from wan_engine import warmup
 
     warmup()
