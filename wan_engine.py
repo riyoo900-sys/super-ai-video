@@ -82,15 +82,25 @@ def _load_pipeline(model_id: str):
     pipe = WanPipeline.from_pretrained(
         model_id, vae=vae, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
     )
-    pipe.enable_vae_slicing()
-    try:
-        pipe.enable_attention_slicing("max")
-    except Exception:
-        pass
 
-    # Never pipe.to("cuda") — UMT5-XXL + Wan OOMs even on 48GB.
-    _log("[wan_engine] step 4/4 enable_sequential_cpu_offload...")
-    pipe.enable_sequential_cpu_offload()
+    # WanPipeline has no enable_vae_slicing — calling it crashes the worker.
+    for name, fn in (
+        ("enable_attention_slicing", lambda: pipe.enable_attention_slicing("max")),
+        ("enable_sequential_cpu_offload", pipe.enable_sequential_cpu_offload),
+        ("enable_model_cpu_offload", pipe.enable_model_cpu_offload),
+    ):
+        try:
+            fn()
+            _log(f"[wan_engine] step 4/4 {name} OK")
+            break
+        except AttributeError:
+            continue
+        except Exception as e:
+            _log(f"[wan_engine] {name} skipped: {e}")
+            continue
+    else:
+        _log("[wan_engine] step 4/4 move to cuda (fallback)")
+        pipe.to("cuda")
 
     try:
         pipe.set_progress_bar_config(disable=True)
