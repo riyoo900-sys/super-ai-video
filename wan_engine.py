@@ -5,7 +5,6 @@ import bootstrap  # noqa: F401 — patch diffusers before import
 
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 _pipe = None
@@ -33,15 +32,32 @@ def _cuda_ready() -> bool:
         return False
 
 
-def _gpu_mem_gb() -> float:
-    try:
-        import torch
-
-        if not torch.cuda.is_available():
-            return 0.0
-        return torch.cuda.get_device_properties(0).total_memory / (1024**3)
-    except Exception:
-        return 0.0
+def generate_smoke_video(prompt: str, output_path: Path) -> None:
+    """Tiny MP4 without GPU model — verifies RunPod handler path."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg not found")
+    safe = prompt.replace(":", r"\:").replace("'", r"\'")[:120]
+    subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            f"color=c=0x1a1a2e:s={FAST_WIDTH}x{FAST_HEIGHT}:d=2",
+            "-vf",
+            f"drawtext=text='SMOKE {safe}':fontcolor=white:fontsize=18:x=(w-text_w)/2:y=(h-text_h)/2",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            str(output_path),
+        ],
+        check=True,
+        timeout=60,
+    )
+    _log(f"[wan_engine] smoke video → {output_path}")
 
 
 def _load_pipeline(model_id: str):
@@ -57,17 +73,14 @@ def _load_pipeline(model_id: str):
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    dtype = torch.bfloat16
-    mem_gb = _gpu_mem_gb()
-    _log(f"[wan_engine] step 2/4 load VAE ({model_id}) gpu={mem_gb:.1f}GB")
-
+    _log(f"[wan_engine] step 2/4 load VAE ({model_id})...")
     vae = AutoencoderKLWan.from_pretrained(
         model_id, subfolder="vae", torch_dtype=torch.float32, low_cpu_mem_usage=True
     )
 
-    _log("[wan_engine] step 3/4 load WanPipeline...")
+    _log("[wan_engine] step 3/4 load WanPipeline (downloads ~10GB first time)...")
     pipe = WanPipeline.from_pretrained(
-        model_id, vae=vae, torch_dtype=dtype, low_cpu_mem_usage=True
+        model_id, vae=vae, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
     )
     pipe.enable_vae_slicing()
     try:
@@ -75,12 +88,9 @@ def _load_pipeline(model_id: str):
     except Exception:
         pass
 
-    if mem_gb >= 20:
-        _log("[wan_engine] step 4/4 move pipeline to CUDA (48GB path)")
-        pipe.to("cuda")
-    else:
-        _log("[wan_engine] step 4/4 enable_model_cpu_offload (16GB path)")
-        pipe.enable_model_cpu_offload()
+    # Never pipe.to("cuda") — UMT5-XXL + Wan OOMs even on 48GB.
+    _log("[wan_engine] step 4/4 enable_sequential_cpu_offload...")
+    pipe.enable_sequential_cpu_offload()
 
     try:
         pipe.set_progress_bar_config(disable=True)

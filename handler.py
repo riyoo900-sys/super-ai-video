@@ -5,34 +5,39 @@ from __future__ import annotations
 import bootstrap  # noqa: F401 — patch diffusers before any model import
 
 import base64
+import sys
 import tempfile
 import traceback
 from pathlib import Path
 
 import runpod
 
-from wan_engine import WAN_MODEL_ID, generate_video, warmup
+from wan_engine import WAN_MODEL_ID, generate_smoke_video, generate_video, warmup
 from watermark_ffmpeg import burn_animated_watermark
 
 
 def handler(job: dict) -> dict:
-    inp = job.get("input") or {}
-    prompt = str(inp.get("prompt", "")).strip()
-    print(f"[handler] job received prompt={prompt[:60]!r}", flush=True)
-    if not prompt:
-        return {"error": "prompt required"}
-
-    duration_sec = int(inp.get("duration_sec") or 4)
-    watermark = bool(inp.get("watermark"))
-    watermark_spec = inp.get("watermark_spec") or {}
-
     try:
+        inp = job.get("input") or {}
+        prompt = str(inp.get("prompt", "")).strip()
+        print(f"[handler] job received prompt={prompt[:60]!r}", flush=True)
+        if not prompt:
+            return {"error": "prompt required"}
+
+        duration_sec = int(inp.get("duration_sec") or 4)
+        watermark = bool(inp.get("watermark"))
+        watermark_spec = inp.get("watermark_spec") or {}
+        smoke_test = bool(inp.get("smoke_test"))
+
         with tempfile.TemporaryDirectory(prefix="runpod_video_") as tmp:
             tmp_dir = Path(tmp)
             raw_mp4 = tmp_dir / "raw.mp4"
             final_mp4 = tmp_dir / "final.mp4"
 
-            generate_video(prompt, duration_sec, raw_mp4, model_id=WAN_MODEL_ID)
+            if smoke_test:
+                generate_smoke_video(prompt, raw_mp4)
+            else:
+                generate_video(prompt, duration_sec, raw_mp4, model_id=WAN_MODEL_ID)
 
             out_path = final_mp4 if watermark else raw_mp4
             if watermark:
@@ -43,15 +48,16 @@ def handler(job: dict) -> dict:
                 "video_base64": base64.b64encode(data).decode("ascii"),
                 "content_type": "video/mp4",
                 "bytes": len(data),
-                "model": WAN_MODEL_ID,
+                "model": "smoke" if smoke_test else WAN_MODEL_ID,
             }
     except Exception as e:
         traceback.print_exc()
+        sys.stderr.flush()
         return {"error": str(e)[:500]}
 
 
 def main() -> None:
-    print("[runpod] worker v8c starting...", flush=True)
+    print("[runpod] worker v8d starting...", flush=True)
     warmup()
     runpod.serverless.start({"handler": handler})
 

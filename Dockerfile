@@ -5,6 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV HF_HOME=/runpod-volume/huggingface
 ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 ENV DIFFUSERS_ATTN_BACKEND=native
+ENV TOKENIZERS_PARALLELISM=false
 
 RUN apt-get update -qq && apt-get install -y -qq ffmpeg fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
