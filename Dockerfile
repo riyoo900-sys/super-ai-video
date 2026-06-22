@@ -2,7 +2,8 @@
 FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV HF_HOME=/runpod-volume/huggingface
+# Use container disk (/tmp), not /runpod-volume — network volume is often too small for ~10GB model
+ENV HF_HOME=/tmp/huggingface
 ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 ENV DIFFUSERS_ATTN_BACKEND=native
 ENV TOKENIZERS_PARALLELISM=false

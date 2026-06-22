@@ -8,11 +8,20 @@ import sys
 MARKER = "# RUNPOD_PATCHED_v8b"
 
 
+def _attention_dispatch_path() -> pathlib.Path | None:
+    ver = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    rel = pathlib.Path("diffusers/models/attention_dispatch.py")
+    for lib in ("site-packages", "dist-packages"):
+        path = pathlib.Path(sys.prefix) / "lib" / ver / lib / rel
+        if path.is_file():
+            return path
+    return None
+
+
 def main() -> None:
-    site = pathlib.Path(sys.prefix) / f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
-    path = site / "diffusers/models/attention_dispatch.py"
-    if not path.is_file():
-        print(f"[patch_diffusers] skip — not found: {path}")
+    path = _attention_dispatch_path()
+    if path is None:
+        print("[patch_diffusers] skip — attention_dispatch.py not found")
         return
 
     text = path.read_text(encoding="utf-8")

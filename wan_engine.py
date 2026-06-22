@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import bootstrap  # noqa: F401 — patch diffusers before import
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -60,10 +61,24 @@ def generate_smoke_video(prompt: str, output_path: Path) -> None:
     _log(f"[wan_engine] smoke video → {output_path}")
 
 
+def _check_model_disk(min_gb: float = 15.0) -> None:
+    cache = os.environ.get("HF_HOME", "/tmp/huggingface")
+    os.makedirs(cache, exist_ok=True)
+    free_gb = shutil.disk_usage(cache).free / (1024**3)
+    _log(f"[wan_engine] HF_HOME={cache} free={free_gb:.1f}GB")
+    if free_gb < min_gb:
+        raise RuntimeError(
+            f"Not enough disk space at {cache}: {free_gb:.1f}GB free, need ~{min_gb}GB. "
+            "In RunPod endpoint settings set Container Disk to at least 50GB, then New Build."
+        )
+
+
 def _load_pipeline(model_id: str):
     global _pipe, _model_id
     if _pipe is not None and _model_id == model_id:
         return _pipe
+
+    _check_model_disk()
 
     import torch
 
