@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RunPod Serverless — Wan 2.1 T2V 1.3B @ 480p (4090 full GPU)."""
+"""RunPod — Wan 2.2 TI2V-5B @ 720p (Kling-class open model, RTX 4090)."""
 from __future__ import annotations
 
 import base64
@@ -17,7 +17,11 @@ def handler(job: dict) -> dict:
         print(f"[handler] keys={list(inp.keys())}", flush=True)
 
         if inp.get("ping"):
-            return {"ok": True, "worker": "v12-real480", "model": "Wan2.1-T2V-1.3B-480p"}
+            return {
+                "ok": True,
+                "worker": "v13-wan22-720p",
+                "model": "Wan2.2-TI2V-5B-720p",
+            }
 
         prompt = str(inp.get("prompt", "")).strip()
         if not prompt:
@@ -73,7 +77,7 @@ def handler(job: dict) -> dict:
 def main() -> None:
     import bootstrap  # noqa: F401
 
-    print("[runpod] worker v12-real480 (1.3B photoreal 480p) starting...", flush=True)
+    print("[runpod] v13-wan22-720p (Wan 2.2 TI2V-5B) starting...", flush=True)
     from wan_engine import warmup
 
     warmup()
