@@ -69,6 +69,58 @@ def _cuda_ready() -> bool:
         return False
 
 
+def _gpu_vram_gb() -> float:
+    import torch
+
+    if not torch.cuda.is_available():
+        return 0.0
+    return torch.cuda.get_device_properties(0).total_memory / (1024**3)
+
+
+def _clear_cuda() -> None:
+    import gc
+
+    import torch
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        try:
+            torch.cuda.synchronize()
+        except Exception:
+            pass
+
+
+def _apply_memory_optimizations(pipe) -> None:
+    try:
+        pipe.enable_attention_slicing("max")
+    except Exception as e:
+        _log(f"[wan_engine] attention_slicing skipped: {e}")
+    try:
+        pipe.enable_vae_slicing()
+    except Exception as e:
+        _log(f"[wan_engine] vae_slicing skipped: {e}")
+    try:
+        if getattr(pipe, "vae", None) is not None:
+            pipe.vae.enable_tiling()
+    except Exception as e:
+        _log(f"[wan_engine] vae_tiling skipped: {e}")
+
+
+def _inference_profile(model_id: str) -> tuple[int, int, int, int]:
+    """frames, width, height, steps — tuned for VRAM."""
+    if not _is_pro_model(model_id):
+        return PRO_FRAMES, PRO_WIDTH, PRO_HEIGHT, PRO_STEPS
+
+    vram_gb = _gpu_vram_gb()
+    if vram_gb >= 48:
+        return PRO_FRAMES, PRO_WIDTH, PRO_HEIGHT, PRO_STEPS
+
+    # RTX 4090 / 24GB: same 480p, fewer frames/steps to avoid OOM during denoise.
+    _log("[wan_engine] 24GB profile: 33 frames, 28 steps @ 832x480")
+    return 33, PRO_WIDTH, PRO_HEIGHT, 28
+
+
 def generate_smoke_video(prompt: str, output_path: Path) -> None:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
@@ -115,28 +167,37 @@ def _configure_pipe(pipe, model_id: str) -> None:
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA/GPU not available on worker")
 
-    vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+    vram_gb = _gpu_vram_gb()
     _log(f"[wan_engine] GPU {torch.cuda.get_device_name(0)} VRAM={vram_gb:.1f}GB")
 
+    # Keep weights on CPU before offload — avoids a full-GPU spike during setup.
     try:
-        pipe.enable_attention_slicing("max")
-    except Exception as e:
-        _log(f"[wan_engine] attention_slicing skipped: {e}")
+        pipe.to("cpu")
+    except Exception:
+        pass
+    _clear_cuda()
+
+    _apply_memory_optimizations(pipe)
 
     if _is_pro_model(model_id):
-        # 14B needs ~50GB+ VRAM full-GPU; RTX 4090 uses smart offload.
-        if vram_gb >= 40:
-            _log("[wan_engine] step 4/4 pipe.to(cuda) [14B datacenter GPU]")
+        # 14B needs 48GB+ for full GPU; 24GB must use sequential CPU offload.
+        if vram_gb >= 48:
+            _log("[wan_engine] step 4/4 pipe.to(cuda) [14B 48GB+ GPU]")
             pipe.to("cuda")
         else:
-            _log("[wan_engine] step 4/4 enable_model_cpu_offload [14B on 24GB]")
-            pipe.enable_model_cpu_offload()
+            _log("[wan_engine] step 4/4 enable_sequential_cpu_offload [14B 24GB]")
+            pipe.enable_sequential_cpu_offload()
     elif vram_gb >= 14:
         _log("[wan_engine] step 4/4 pipe.to(cuda) [1.3B]")
         pipe.to("cuda")
     else:
         _log("[wan_engine] step 4/4 enable_model_cpu_offload [1.3B low VRAM]")
         pipe.enable_model_cpu_offload()
+
+    _clear_cuda()
+    if torch.cuda.is_available():
+        alloc_gb = torch.cuda.memory_allocated() / (1024**3)
+        _log(f"[wan_engine] CUDA allocated after configure: {alloc_gb:.2f}GB")
 
 
 def _apply_scheduler(pipe, model_id: str) -> None:
@@ -217,28 +278,29 @@ def generate_video(
     import torch
 
     _log(f"[wan_engine] generate start model={model_id} prompt={prompt[:60]!r}")
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    _clear_cuda()
 
     pipe = _load_pipeline(model_id)
     capped = min(max(1, duration_sec), PRO_MAX_DURATION_SEC)
     enhanced = enhance_prompt(prompt)
+    num_frames, width, height, steps = _inference_profile(model_id)
 
+    _clear_cuda()
     _log(
-        f"[wan_engine] inference {PRO_FRAMES}f {PRO_WIDTH}x{PRO_HEIGHT} "
-        f"{PRO_STEPS}steps (~{capped}s)..."
+        f"[wan_engine] inference {num_frames}f {width}x{height} "
+        f"{steps}steps (~{capped}s)..."
     )
     result = pipe(
         prompt=enhanced,
         negative_prompt=NEGATIVE_PROMPT,
-        num_frames=PRO_FRAMES,
-        width=PRO_WIDTH,
-        height=PRO_HEIGHT,
-        num_inference_steps=PRO_STEPS,
+        num_frames=num_frames,
+        width=width,
+        height=height,
+        num_inference_steps=steps,
         guidance_scale=5.0,
     )
 
     _log("[wan_engine] export mp4...")
     export_to_video(result.frames[0], str(output_path), fps=PRO_FPS)
-    sec = PRO_FRAMES / PRO_FPS
+    sec = num_frames / PRO_FPS
     _log(f"[wan_engine] done → {output_path} (~{sec:.1f}s @ {PRO_FPS}fps)")
