@@ -19,6 +19,6 @@ COPY requirements.txt bootstrap.py patch_diffusers.py ./
 RUN pip install --no-cache-dir -r requirements.txt \
     && python patch_diffusers.py
 
-COPY wan_engine.py watermark_ffmpeg.py handler.py start.py ./
+COPY wan_engine.py ads_prompts.py watermark_ffmpeg.py handler.py start.py ./
 
 CMD ["python", "-u", "start.py"]
