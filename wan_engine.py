@@ -10,6 +10,7 @@ from pathlib import Path
 
 _pipe = None
 _model_id: str | None = None
+_lora_loaded: bool = False
 
 # Default: Wan 2.2 5B — 720p@24fps on consumer 4090 (Apache 2.0).
 WAN_MODEL_ID = os.environ.get(
@@ -44,6 +45,10 @@ REALISM_SUFFIX = (
     "photorealistic, cinematic lighting, natural smooth motion, sharp focus, "
     "realistic textures, lifelike, high detail, professional color grading"
 )
+
+# Optional LoRA trained via training/ads-lora/ (mount on RunPod network volume).
+WAN_ADS_LORA_PATH = os.environ.get("WAN_ADS_LORA_PATH", "").strip()
+WAN_ADS_LORA_SCALE = float(os.environ.get("WAN_ADS_LORA_SCALE", "0.85"))
 
 
 def enhance_prompt(prompt: str) -> str:
@@ -209,6 +214,38 @@ def _configure_pipe(pipe, model_id: str) -> None:
         _log(f"[wan_engine] CUDA allocated: {alloc_gb:.2f}GB")
 
 
+def _maybe_load_ads_lora(pipe) -> None:
+    global _lora_loaded
+    if _lora_loaded or not WAN_ADS_LORA_PATH:
+        return
+    lora_path = Path(WAN_ADS_LORA_PATH)
+    if not lora_path.exists():
+        _log(f"[wan_engine] WAN_ADS_LORA_PATH missing: {lora_path}")
+        return
+    try:
+        if lora_path.is_file():
+            pipe.load_lora_weights(str(lora_path.parent), weight_name=lora_path.name)
+        else:
+            pipe.load_lora_weights(str(lora_path))
+        _lora_loaded = True
+        _log(f"[wan_engine] Ads LoRA loaded from {lora_path} scale={WAN_ADS_LORA_SCALE}")
+    except Exception as e:
+        _log(f"[wan_engine] Ads LoRA load failed: {e}")
+
+
+def _download_product_image(url: str):
+    import requests
+    from PIL import Image
+    from io import BytesIO
+
+    _log(f"[wan_engine] downloading product image…")
+    r = requests.get(url, timeout=90)
+    r.raise_for_status()
+    img = Image.open(BytesIO(r.content)).convert("RGB")
+    _log(f"[wan_engine] product image {img.size[0]}x{img.size[1]}")
+    return img
+
+
 def _load_pipeline(model_id: str):
     global _pipe, _model_id
     if _pipe is not None and _model_id == model_id:
@@ -229,6 +266,7 @@ def _load_pipeline(model_id: str):
         model_id, vae=vae, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
     )
     _configure_pipe(pipe, model_id)
+    _maybe_load_ads_lora(pipe)
     try:
         pipe.set_progress_bar_config(disable=True)
     except Exception:
@@ -254,17 +292,35 @@ def generate_video(
     duration_sec: int,
     output_path: Path,
     model_id: str = WAN_MODEL_ID,
+    *,
+    generation_mode: str = "standard",
+    ad_category: str | None = None,
+    product_image_url: str | None = None,
 ) -> None:
     if not _cuda_ready():
         raise RuntimeError("CUDA/GPU not available on worker")
 
     from diffusers.utils import export_to_video
 
-    _log(f"[wan_engine] generate model={model_id} prompt={prompt[:60]!r}")
+    ads_mode = str(generation_mode or "standard").strip().lower() == "ads"
+    mode_label = "ads" if ads_mode else "standard"
+    _log(
+        f"[wan_engine] generate mode={mode_label} model={model_id} "
+        f"prompt={prompt[:60]!r}"
+    )
     _clear_cuda()
 
     pipe = _load_pipeline(model_id)
-    enhanced = enhance_prompt(prompt)
+
+    if ads_mode:
+        from ads_prompts import ads_negative_prompt, build_ads_prompt
+
+        enhanced = build_ads_prompt(prompt, ad_category)
+        negative = ads_negative_prompt(NEGATIVE_PROMPT)
+    else:
+        enhanced = enhance_prompt(prompt)
+        negative = NEGATIVE_PROMPT
+
     num_frames, width, height, steps, fps = _inference_profile(model_id)
 
     # Cap frames to requested duration when shorter than profile max.
@@ -274,16 +330,34 @@ def generate_video(
         want = (want // 4) * 4 + 1
         num_frames = want
 
+    product_image = None
+    if product_image_url:
+        try:
+            product_image = _download_product_image(product_image_url)
+        except Exception as e:
+            _log(f"[wan_engine] product image failed ({e}) — text-only fallback")
+
+    pipe_kwargs: dict = {
+        "prompt": enhanced,
+        "negative_prompt": negative,
+        "num_frames": num_frames,
+        "width": width,
+        "height": height,
+        "num_inference_steps": steps,
+        "guidance_scale": W22_GUIDANCE if _is_wan22(model_id) else 6.0,
+    }
+    if product_image is not None:
+        pipe_kwargs["image"] = product_image
+        _log("[wan_engine] TI2V — product image conditioning")
+
+    if ads_mode and _lora_loaded and WAN_ADS_LORA_SCALE != 1.0:
+        try:
+            pipe_kwargs["cross_attention_kwargs"] = {"scale": WAN_ADS_LORA_SCALE}
+        except Exception:
+            pass
+
     _log(f"[wan_engine] infer {num_frames}f {width}x{height} {steps}steps")
-    result = pipe(
-        prompt=enhanced,
-        negative_prompt=NEGATIVE_PROMPT,
-        num_frames=num_frames,
-        width=width,
-        height=height,
-        num_inference_steps=steps,
-        guidance_scale=W22_GUIDANCE if _is_wan22(model_id) else 6.0,
-    )
+    result = pipe(**pipe_kwargs)
 
     export_to_video(result.frames[0], str(output_path), fps=fps)
     _log(f"[wan_engine] done → {output_path} (~{num_frames / fps:.1f}s @ {fps}fps)")

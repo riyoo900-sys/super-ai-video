@@ -121,26 +121,37 @@ def upload_output(uid: str, job_id: str, local_mp4: Path) -> str:
 
 
 def process_job(db: firestore.Client, snap: firestore.DocumentSnapshot) -> None:
-    from wan_engine import WAN_MODEL_ID, enhance_prompt, generate_video
+    from wan_engine import WAN_MODEL_ID, generate_video
     from watermark_ffmpeg import burn_animated_watermark
 
     ref = snap.reference
     data = snap.to_dict() or {}
-    prompt = enhance_prompt(str(data.get("prompt", "")).strip())
+    prompt = str(data.get("prompt", "")).strip()
     duration_sec = int(data.get("durationSec") or 4)
     uid = str(data.get("uid", ""))
     job_id = snap.id
     watermark = bool(data.get("watermark"))
     watermark_spec = data.get("watermarkSpec") or {}
+    generation_mode = str(data.get("generationMode") or "standard").strip().lower()
+    ad_category = str(data.get("adCategory") or "auto").strip().lower()
+    product_image_url = str(data.get("productImageUrl") or "").strip() or None
 
-    _log(f"[pod_worker] job={job_id} uid={uid} dur={duration_sec}s")
+    _log(f"[pod_worker] job={job_id} uid={uid} dur={duration_sec}s mode={generation_mode}")
 
     with tempfile.TemporaryDirectory(prefix="pod_video_") as tmp:
         tmp_dir = Path(tmp)
         raw_mp4 = tmp_dir / "raw.mp4"
         final_mp4 = tmp_dir / "final.mp4"
 
-        generate_video(prompt, duration_sec, raw_mp4, model_id=WAN_MODEL_ID)
+        generate_video(
+            prompt,
+            duration_sec,
+            raw_mp4,
+            model_id=WAN_MODEL_ID,
+            generation_mode=generation_mode,
+            ad_category=ad_category,
+            product_image_url=product_image_url,
+        )
         out_path = final_mp4 if watermark else raw_mp4
         if watermark:
             burn_animated_watermark(raw_mp4, final_mp4, watermark_spec)

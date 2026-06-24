@@ -19,8 +19,9 @@ def handler(job: dict) -> dict:
         if inp.get("ping"):
             return {
                 "ok": True,
-                "worker": "v13-wan22-720p",
+                "worker": "v14-super-ai-ads",
                 "model": "Wan2.2-TI2V-5B-720p",
+                "ads_lora": bool(__import__("os").environ.get("WAN_ADS_LORA_PATH", "").strip()),
             }
 
         prompt = str(inp.get("prompt", "")).strip()
@@ -31,6 +32,9 @@ def handler(job: dict) -> dict:
         watermark = bool(inp.get("watermark"))
         watermark_spec = inp.get("watermark_spec") or {}
         smoke_test = bool(inp.get("smoke_test"))
+        generation_mode = str(inp.get("generation_mode") or "standard").strip().lower()
+        ad_category = str(inp.get("ad_category") or "auto").strip().lower()
+        product_image_url = str(inp.get("product_image_url") or "").strip() or None
 
         with tempfile.TemporaryDirectory(prefix="runpod_video_") as tmp:
             tmp_dir = Path(tmp)
@@ -43,15 +47,20 @@ def handler(job: dict) -> dict:
                 generate_smoke_video(prompt, raw_mp4)
                 model_name = "smoke"
             else:
-                from wan_engine import WAN_MODEL_ID, enhance_prompt, generate_video
+                from wan_engine import WAN_MODEL_ID, generate_video
 
                 generate_video(
-                    enhance_prompt(prompt),
+                    prompt,
                     duration_sec,
                     raw_mp4,
                     model_id=WAN_MODEL_ID,
+                    generation_mode=generation_mode,
+                    ad_category=ad_category,
+                    product_image_url=product_image_url,
                 )
                 model_name = WAN_MODEL_ID
+                if generation_mode == "ads":
+                    model_name = f"{WAN_MODEL_ID}+super-ai-ads"
 
             out_path = final_mp4 if watermark else raw_mp4
             if watermark:
@@ -77,7 +86,7 @@ def handler(job: dict) -> dict:
 def main() -> None:
     import bootstrap  # noqa: F401
 
-    print("[runpod] v13-wan22-720p (Wan 2.2 TI2V-5B) starting...", flush=True)
+    print("[runpod] v14-super-ai-ads (Wan 2.2 TI2V-5B + Ads mode) starting...", flush=True)
     from wan_engine import warmup
 
     warmup()
