@@ -26,6 +26,16 @@ SCENE_STYLE_SUFFIX: dict[str, str] = {
         "appetizing close-up, condensation and cold fizz, viewer desires the product, "
         "joyful indulgence, mouth-watering presentation"
     ),
+    "benefits": (
+        "compelling product benefits showcase, clear value for the customer, persuasive marketing "
+        "storytelling, viewer understands why to buy, highlight key features and emotional payoff, "
+        "before-and-after feeling, problem solved, satisfied user reaction"
+    ),
+    "on_model": (
+        "real person wearing or using the exact product, full body or natural close-up, "
+        "authentic human model, confident natural movement, product clearly visible on the person, "
+        "fashion editorial commercial, believable lifestyle moment"
+    ),
 }
 
 CATEGORY_PREFIX: dict[str, str] = {
@@ -45,6 +55,68 @@ DRINK_ENJOY_DEFAULT = (
     "cold cola bottle with ice, slow pour into glass, fizzy bubbles rising, "
     "person takes a refreshing sip and smiles with satisfaction, summer vibe"
 )
+
+APP_BENEFITS_DEFAULT = (
+    "smartphone showing the app interface, user discovers key features one by one, "
+    "happy customer saves time and achieves their goal, clear benefit messaging, "
+    "modern app promo commercial"
+)
+
+SHOES_ON_MODEL_DEFAULT = (
+    "athletic person lacing up and wearing these exact sneakers, walking then light jogging "
+    "on city street, full body shot, confident natural stride, product clearly on feet"
+)
+
+SHOES_PRODUCT_DEFAULT = (
+    "white sneakers floating, soft shadow, elegant slow 360 orbit, premium studio lighting"
+)
+
+FASHION_ON_MODEL_DEFAULT = (
+    "elegant model wearing this outfit, confident walk toward camera, golden hour street, "
+    "fabric flowing naturally, fashion editorial look"
+)
+
+WATCH_ON_MODEL_DEFAULT = (
+    "professional person glances at luxury watch on wrist, subtle satisfied smile, "
+    "modern office lobby, product detail sharp on wrist"
+)
+
+PERFUME_ON_MODEL_DEFAULT = (
+    "sophisticated person sprays perfume on wrist, slow motion mist, evening attire, "
+    "luxurious intimate mood, bottle and skin detail sharp"
+)
+
+FOOD_ENJOY_DEFAULT = (
+    "chef presents hot dish, steam rising, appetizing close-up bite, warm kitchen lighting, "
+    "satisfied smile after tasting"
+)
+
+SKINCARE_BENEFITS_DEFAULT = (
+    "person applies skincare product gently, glowing healthy skin, mirror reflection, "
+    "fresh confident smile, clean bathroom light"
+)
+
+TECH_BENEFITS_DEFAULT = (
+    "user unboxes sleek device, discovers key features, productive happy workflow, "
+    "modern desk setup, premium tech commercial"
+)
+
+# (category, scene_style) -> default prompt when user leaves the field empty.
+DEFAULT_PROMPTS: dict[tuple[str, str], str] = {
+    ("drink", "enjoy"): DRINK_ENJOY_DEFAULT,
+    ("food", "enjoy"): FOOD_ENJOY_DEFAULT,
+    ("app", "benefits"): APP_BENEFITS_DEFAULT,
+    ("tech", "benefits"): TECH_BENEFITS_DEFAULT,
+    ("skincare", "benefits"): SKINCARE_BENEFITS_DEFAULT,
+    ("shoes", "on_model"): SHOES_ON_MODEL_DEFAULT,
+    ("shoes", "product"): SHOES_PRODUCT_DEFAULT,
+    ("fashion", "on_model"): FASHION_ON_MODEL_DEFAULT,
+    ("watch", "on_model"): WATCH_ON_MODEL_DEFAULT,
+    ("perfume", "on_model"): PERFUME_ON_MODEL_DEFAULT,
+    ("shoes", "lifestyle"): SHOES_ON_MODEL_DEFAULT,
+    ("fashion", "lifestyle"): FASHION_ON_MODEL_DEFAULT,
+    ("fashion", "benefits"): FASHION_ON_MODEL_DEFAULT,
+}
 
 
 def normalize_category(category: str | None) -> str:
@@ -68,8 +140,8 @@ def build_ads_prompt(
     cat = normalize_category(category)
     style = normalize_scene_style(scene_style)
 
-    if not p and cat == "drink" and style == "enjoy":
-        p = DRINK_ENJOY_DEFAULT
+    if not p:
+        p = DEFAULT_PROMPTS.get((cat, style), "")
     if not p:
         return p
 

@@ -28,7 +28,7 @@ def handler(job: dict) -> dict:
         if not prompt:
             return {"error": "prompt required"}
 
-        duration_sec = int(inp.get("duration_sec") or 4)
+        duration_sec = int(inp.get("duration_sec") or 8)
         watermark = bool(inp.get("watermark"))
         watermark_spec = inp.get("watermark_spec") or {}
         smoke_test = bool(inp.get("smoke_test"))

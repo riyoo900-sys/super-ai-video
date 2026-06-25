@@ -127,7 +127,7 @@ def process_job(db: firestore.Client, snap: firestore.DocumentSnapshot) -> None:
     ref = snap.reference
     data = snap.to_dict() or {}
     prompt = str(data.get("prompt", "")).strip()
-    duration_sec = int(data.get("durationSec") or 4)
+    duration_sec = int(data.get("durationSec") or 8)
     uid = str(data.get("uid", ""))
     job_id = snap.id
     watermark = bool(data.get("watermark"))

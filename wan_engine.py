@@ -110,6 +110,12 @@ def _clear_cuda() -> None:
             pass
 
 
+def _align_frames(count: int) -> int:
+    """Wan expects num_frames % 4 == 1."""
+    count = max(9, count)
+    return (count // 4) * 4 + 1
+
+
 def _inference_profile(model_id: str) -> tuple[int, int, int, int, int]:
     """frames, width, height, steps, fps."""
     if _is_wan22(model_id) and not _is_pro_model(model_id):
@@ -126,6 +132,40 @@ def _inference_profile(model_id: str) -> tuple[int, int, int, int, int]:
         return 33, 832, 480, 28, 16
 
     return LITE_FRAMES, LITE_WIDTH, LITE_HEIGHT, LITE_STEPS, LITE_FPS
+
+
+def _profile_for_duration(model_id: str, duration_sec: int) -> tuple[int, int, int, int, int]:
+    """frames, width, height, steps, fps — tuned for 8–20s clips on RTX 4090."""
+    duration_sec = max(4, min(20, int(duration_sec or 8)))
+
+    if _is_pro_model(model_id):
+        vram_gb = _gpu_vram_gb()
+        fps = 16
+        frames = _align_frames(int(duration_sec * fps))
+        frames = min(frames, 257 if vram_gb >= 48 else 161)
+        return frames, 832, 480, 28, fps
+
+    if not _is_wan22(model_id):
+        fps = LITE_FPS
+        frames = _align_frames(int(duration_sec * fps))
+        return min(frames, 161), LITE_WIDTH, LITE_HEIGHT, LITE_STEPS, fps
+
+    if duration_sec <= 8:
+        fps, w, h, steps = W22_FPS, W22_WIDTH, W22_HEIGHT, W22_STEPS
+        cap = 193
+    elif duration_sec <= 12:
+        fps, w, h, steps = 16, W22_WIDTH, W22_HEIGHT, 32
+        cap = 193
+    else:
+        fps, w, h, steps = 12, LITE_WIDTH, LITE_HEIGHT, 28
+        cap = 241
+
+    frames = min(_align_frames(int(duration_sec * fps)), cap)
+    _log(
+        f"[wan_engine] duration profile {duration_sec}s -> {frames}f "
+        f"{w}x{h} {steps}steps @{fps}fps"
+    )
+    return frames, w, h, steps, fps
 
 
 def generate_smoke_video(prompt: str, output_path: Path) -> None:
@@ -315,6 +355,13 @@ def generate_video(
 
     pipe = _load_pipeline(model_id)
 
+    product_image = None
+    if product_image_url:
+        try:
+            product_image = _download_product_image(product_image_url)
+        except Exception as e:
+            _log(f"[wan_engine] product image failed ({e}) — text-only fallback")
+
     if ads_mode:
         from ads_prompts import ads_negative_prompt, build_ads_prompt
 
@@ -329,21 +376,12 @@ def generate_video(
         enhanced = enhance_prompt(prompt)
         negative = NEGATIVE_PROMPT
 
-    num_frames, width, height, steps, fps = _inference_profile(model_id)
-
-    # Cap frames to requested duration when shorter than profile max.
-    if duration_sec > 0 and fps > 0:
-        want = int(duration_sec * fps)
-        want = max(9, min(want, num_frames))
-        want = (want // 4) * 4 + 1
-        num_frames = want
-
-    product_image = None
-    if product_image_url:
-        try:
-            product_image = _download_product_image(product_image_url)
-        except Exception as e:
-            _log(f"[wan_engine] product image failed ({e}) — text-only fallback")
+    if duration_sec > 0:
+        num_frames, width, height, steps, fps = _profile_for_duration(
+            model_id, duration_sec
+        )
+    else:
+        num_frames, width, height, steps, fps = _inference_profile(model_id)
 
     pipe_kwargs: dict = {
         "prompt": enhanced,
