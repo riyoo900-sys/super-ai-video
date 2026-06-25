@@ -18,6 +18,8 @@ WAN_MODEL_ID = os.environ.get(
 )
 WAN_MODEL_LITE = "Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
 WAN_MODEL_PRO = "Wan-AI/Wan2.2-T2V-A14B-Diffusers"
+# Image-to-video MoE — best open quality for product ads (needs ~48GB VRAM, A6000).
+WAN_MODEL_I2V_PRO = "Wan-AI/Wan2.2-I2V-A14B-Diffusers"
 
 # 720p 16:9 — official Wan 2.2 TI2V resolution.
 W22_WIDTH = 1280
@@ -77,6 +79,35 @@ def _is_wan22(model_id: str) -> bool:
 
 def _is_pro_model(model_id: str) -> bool:
     return "A14B" in model_id or "14B" in model_id
+
+
+def _is_i2v_model(model_id: str) -> bool:
+    return "I2V" in model_id.upper()
+
+
+def resolve_model_id(
+    model_tier: str | None = None,
+    *,
+    has_product_image: bool = False,
+    generation_mode: str = "standard",
+) -> str:
+    """Pick Wan checkpoint: 5B (4090) vs 14B MoE (A6000 pro tier)."""
+    forced = os.environ.get("WAN_MODEL_ID", "").strip()
+    if forced:
+        return forced
+
+    tier = (model_tier or os.environ.get("WAN_MODEL_TIER", "standard")).strip().lower()
+    pro_tier = tier in ("pro", "ultra", "premium") or os.environ.get(
+        "WAN_MODEL_TIER", ""
+    ).strip().lower() in ("pro", "ultra", "premium")
+
+    if not pro_tier:
+        return WAN_MODEL_ID
+
+    ads = str(generation_mode or "standard").strip().lower() == "ads"
+    if has_product_image or ads:
+        return WAN_MODEL_I2V_PRO
+    return WAN_MODEL_PRO
 
 
 def _cuda_ready() -> bool:
@@ -140,10 +171,26 @@ def _profile_for_duration(model_id: str, duration_sec: int) -> tuple[int, int, i
 
     if _is_pro_model(model_id):
         vram_gb = _gpu_vram_gb()
+        duration_sec = max(4, min(20, int(duration_sec or 8)))
+        if vram_gb >= 48:
+            if duration_sec <= 10:
+                fps, w, h, steps = 24, W22_WIDTH, W22_HEIGHT, 36
+                cap = 193
+            elif duration_sec <= 15:
+                fps, w, h, steps = 16, W22_WIDTH, W22_HEIGHT, 34
+                cap = 241
+            else:
+                fps, w, h, steps = 16, LITE_WIDTH, LITE_HEIGHT, 30
+                cap = 257
+            frames = min(_align_frames(int(duration_sec * fps)), cap)
+            _log(
+                f"[wan_engine] A14B 48GB profile {duration_sec}s -> {frames}f "
+                f"{w}x{h} {steps}steps @{fps}fps"
+            )
+            return frames, w, h, steps, fps
         fps = 16
-        frames = _align_frames(int(duration_sec * fps))
-        frames = min(frames, 257 if vram_gb >= 48 else 161)
-        return frames, 832, 480, 28, fps
+        frames = min(_align_frames(int(duration_sec * 16)), 161)
+        return frames, LITE_WIDTH, LITE_HEIGHT, 28, fps
 
     if not _is_wan22(model_id):
         fps = LITE_FPS
@@ -200,8 +247,8 @@ def _check_model_disk(model_id: str) -> None:
     free_gb = shutil.disk_usage(cache).free / (1024**3)
     if _is_wan22(model_id):
         need_gb = 25.0
-    elif _is_pro_model(model_id):
-        need_gb = 45.0
+    elif _is_i2v_model(model_id) or _is_pro_model(model_id):
+        need_gb = 55.0
     else:
         need_gb = 12.0
     _log(f"[wan_engine] HF_HOME={cache} free={free_gb:.1f}GB need={need_gb:.0f}GB")
@@ -241,8 +288,10 @@ def _configure_pipe(pipe, model_id: str) -> None:
         except Exception:
             pass
         if vram_gb >= 48:
+            _log("[wan_engine] Wan A14B → pipe.to(cuda) [48GB 720p]")
             pipe.to("cuda")
         else:
+            _log("[wan_engine] Wan A14B → sequential_cpu_offload [24GB 480p]")
             pipe.enable_sequential_cpu_offload()
     else:
         try:
@@ -297,17 +346,29 @@ def _load_pipeline(model_id: str):
 
     _check_model_disk(model_id)
     import torch
-    from diffusers import AutoencoderKLWan, WanPipeline
 
-    _log(f"[wan_engine] loading {model_id}...")
-    _clear_cuda()
+    if _is_i2v_model(model_id):
+        from diffusers import AutoencoderKLWan, WanImageToVideoPipeline
 
-    vae = AutoencoderKLWan.from_pretrained(
-        model_id, subfolder="vae", torch_dtype=torch.float32, low_cpu_mem_usage=True
-    )
-    pipe = WanPipeline.from_pretrained(
-        model_id, vae=vae, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
-    )
+        _log(f"[wan_engine] loading I2V {model_id}...")
+        _clear_cuda()
+        vae = AutoencoderKLWan.from_pretrained(
+            model_id, subfolder="vae", torch_dtype=torch.float32, low_cpu_mem_usage=True
+        )
+        pipe = WanImageToVideoPipeline.from_pretrained(
+            model_id, vae=vae, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+        )
+    else:
+        from diffusers import AutoencoderKLWan, WanPipeline
+
+        _log(f"[wan_engine] loading {model_id}...")
+        _clear_cuda()
+        vae = AutoencoderKLWan.from_pretrained(
+            model_id, subfolder="vae", torch_dtype=torch.float32, low_cpu_mem_usage=True
+        )
+        pipe = WanPipeline.from_pretrained(
+            model_id, vae=vae, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+        )
     _configure_pipe(pipe, model_id)
     _maybe_load_ads_lora(pipe)
     try:
@@ -394,7 +455,11 @@ def generate_video(
     }
     if product_image is not None:
         pipe_kwargs["image"] = product_image
-        _log("[wan_engine] TI2V — product image conditioning")
+        _log("[wan_engine] I2V/TI2V — product image conditioning")
+    elif _is_i2v_model(model_id):
+        raise RuntimeError(
+            "Wan I2V-A14B requires a product image — upload a photo in Super AI Ads"
+        )
 
     if ads_mode and _lora_loaded and WAN_ADS_LORA_SCALE != 1.0:
         try:

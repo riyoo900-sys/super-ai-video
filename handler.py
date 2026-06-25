@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RunPod — Wan 2.2 TI2V-5B @ 720p (Kling-class open model, RTX 4090)."""
+"""RunPod — Wan 2.2 (5B standard / 14B I2V pro on A6000)."""
 from __future__ import annotations
 
 import base64
@@ -17,10 +17,14 @@ def handler(job: dict) -> dict:
         print(f"[handler] keys={list(inp.keys())}", flush=True)
 
         if inp.get("ping"):
+            import os
+
+            tier = os.environ.get("WAN_MODEL_TIER", "standard")
             return {
                 "ok": True,
-                "worker": "v14-super-ai-ads",
-                "model": "Wan2.2-TI2V-5B-720p",
+                "worker": "v15-wan14b-pro",
+                "model_tier": tier,
+                "model": "Wan2.2-I2V-A14B" if tier == "pro" else "Wan2.2-TI2V-5B",
                 "ads_lora": bool(__import__("os").environ.get("WAN_ADS_LORA_PATH", "").strip()),
             }
 
@@ -36,6 +40,7 @@ def handler(job: dict) -> dict:
         ad_category = str(inp.get("ad_category") or "auto").strip().lower()
         ad_scene_style = str(inp.get("ad_scene_style") or "product").strip().lower()
         product_image_url = str(inp.get("product_image_url") or "").strip() or None
+        model_tier = str(inp.get("model_tier") or "standard").strip().lower()
 
         with tempfile.TemporaryDirectory(prefix="runpod_video_") as tmp:
             tmp_dir = Path(tmp)
@@ -48,19 +53,24 @@ def handler(job: dict) -> dict:
                 generate_smoke_video(prompt, raw_mp4)
                 model_name = "smoke"
             else:
-                from wan_engine import WAN_MODEL_ID, generate_video
+                from wan_engine import generate_video, resolve_model_id
 
+                model_id = resolve_model_id(
+                    model_tier,
+                    has_product_image=bool(product_image_url),
+                    generation_mode=generation_mode,
+                )
                 generate_video(
                     prompt,
                     duration_sec,
                     raw_mp4,
-                    model_id=WAN_MODEL_ID,
+                    model_id=model_id,
                     generation_mode=generation_mode,
                     ad_category=ad_category,
                     ad_scene_style=ad_scene_style,
                     product_image_url=product_image_url,
                 )
-                model_name = WAN_MODEL_ID
+                model_name = model_id
                 if generation_mode == "ads":
                     model_name = f"{WAN_MODEL_ID}+super-ai-ads"
 
@@ -88,7 +98,7 @@ def handler(job: dict) -> dict:
 def main() -> None:
     import bootstrap  # noqa: F401
 
-    print("[runpod] v14-super-ai-ads starting (lazy model load)...", flush=True)
+    print("[runpod] v15-wan14b-pro starting (lazy model load)...", flush=True)
     from wan_engine import warmup
 
     warmup()
