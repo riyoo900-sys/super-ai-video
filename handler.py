@@ -34,6 +34,7 @@ def handler(job: dict) -> dict:
         smoke_test = bool(inp.get("smoke_test"))
         generation_mode = str(inp.get("generation_mode") or "standard").strip().lower()
         ad_category = str(inp.get("ad_category") or "auto").strip().lower()
+        ad_scene_style = str(inp.get("ad_scene_style") or "product").strip().lower()
         product_image_url = str(inp.get("product_image_url") or "").strip() or None
 
         with tempfile.TemporaryDirectory(prefix="runpod_video_") as tmp:
@@ -56,6 +57,7 @@ def handler(job: dict) -> dict:
                     model_id=WAN_MODEL_ID,
                     generation_mode=generation_mode,
                     ad_category=ad_category,
+                    ad_scene_style=ad_scene_style,
                     product_image_url=product_image_url,
                 )
                 model_name = WAN_MODEL_ID

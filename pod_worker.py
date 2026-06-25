@@ -134,6 +134,7 @@ def process_job(db: firestore.Client, snap: firestore.DocumentSnapshot) -> None:
     watermark_spec = data.get("watermarkSpec") or {}
     generation_mode = str(data.get("generationMode") or "standard").strip().lower()
     ad_category = str(data.get("adCategory") or "auto").strip().lower()
+    ad_scene_style = str(data.get("adSceneStyle") or "product").strip().lower()
     product_image_url = str(data.get("productImageUrl") or "").strip() or None
 
     _log(f"[pod_worker] job={job_id} uid={uid} dur={duration_sec}s mode={generation_mode}")
@@ -150,6 +151,7 @@ def process_job(db: firestore.Client, snap: firestore.DocumentSnapshot) -> None:
             model_id=WAN_MODEL_ID,
             generation_mode=generation_mode,
             ad_category=ad_category,
+            ad_scene_style=ad_scene_style,
             product_image_url=product_image_url,
         )
         out_path = final_mp4 if watermark else raw_mp4

@@ -297,6 +297,7 @@ def generate_video(
     *,
     generation_mode: str = "standard",
     ad_category: str | None = None,
+    ad_scene_style: str | None = "product",
     product_image_url: str | None = None,
 ) -> None:
     if not _cuda_ready():
@@ -318,7 +319,10 @@ def generate_video(
         from ads_prompts import ads_negative_prompt, build_ads_prompt
 
         enhanced = build_ads_prompt(
-            prompt, ad_category, has_product_image=product_image is not None
+            prompt,
+            ad_category,
+            scene_style=ad_scene_style,
+            has_product_image=product_image is not None,
         )
         negative = ads_negative_prompt(NEGATIVE_PROMPT)
     else:
