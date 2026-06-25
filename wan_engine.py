@@ -317,7 +317,9 @@ def generate_video(
     if ads_mode:
         from ads_prompts import ads_negative_prompt, build_ads_prompt
 
-        enhanced = build_ads_prompt(prompt, ad_category)
+        enhanced = build_ads_prompt(
+            prompt, ad_category, has_product_image=product_image is not None
+        )
         negative = ads_negative_prompt(NEGATIVE_PROMPT)
     else:
         enhanced = enhance_prompt(prompt)
