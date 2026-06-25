@@ -86,7 +86,7 @@ def handler(job: dict) -> dict:
 def main() -> None:
     import bootstrap  # noqa: F401
 
-    print("[runpod] v14-super-ai-ads (Wan 2.2 TI2V-5B + Ads mode) starting...", flush=True)
+    print("[runpod] v14-super-ai-ads starting (lazy model load)...", flush=True)
     from wan_engine import warmup
 
     warmup()

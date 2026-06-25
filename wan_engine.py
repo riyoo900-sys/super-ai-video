@@ -48,7 +48,10 @@ REALISM_SUFFIX = (
 
 # Optional LoRA trained via training/ads-lora/ (mount on RunPod network volume).
 WAN_ADS_LORA_PATH = os.environ.get("WAN_ADS_LORA_PATH", "").strip()
-WAN_ADS_LORA_SCALE = float(os.environ.get("WAN_ADS_LORA_SCALE", "0.85"))
+try:
+    WAN_ADS_LORA_SCALE = float(os.environ.get("WAN_ADS_LORA_SCALE", "0.85"))
+except ValueError:
+    WAN_ADS_LORA_SCALE = 0.85
 
 
 def enhance_prompt(prompt: str) -> str:
@@ -279,12 +282,11 @@ def _load_pipeline(model_id: str):
 
 
 def warmup(model_id: str | None = None) -> None:
+    """Fast worker boot — model loads on first real job (RunPod health check)."""
     if not _cuda_ready():
         _log("[wan_engine] warmup skipped — no CUDA")
         return
-    mid = model_id or WAN_MODEL_ID
-    _load_pipeline(mid)
-    _log("[wan_engine] warmup done")
+    _log("[wan_engine] warmup deferred until first job (fast worker start)")
 
 
 def generate_video(
